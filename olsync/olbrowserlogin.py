@@ -12,7 +12,14 @@
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtWebEngineWidgets import *
-from olclient import LOGIN_URL,PROJECT_URL
+try:
+    # Import for pip installation / wheel
+    from olsync.olclient import LOGIN_URL,PROJECT_URL
+except ImportError:
+    # Import for development
+    from olclient import LOGIN_URL,PROJECT_URL
+
+
 # JS snippets to extract the csrfToken
 JAVASCRIPT_CSRF_EXTRACTORS = ["document.getElementsByName('ol-csrfToken')[0].content","window.csrfToken"]
 
