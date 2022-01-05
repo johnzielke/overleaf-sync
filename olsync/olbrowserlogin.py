@@ -12,14 +12,12 @@
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtWebEngineWidgets import *
+from olclient import LOGIN_URL,PROJECT_URL
+# JS snippets to extract the csrfToken
+JAVASCRIPT_CSRF_EXTRACTORS = ["document.getElementsByName('ol-csrfToken')[0].content","window.csrfToken"]
 
-# Where to get the CSRF Token and where to send the login request to
-LOGIN_URL = "https://www.overleaf.com/login"
-PROJECT_URL = "https://www.overleaf.com/project"  # The dashboard URL
-# JS snippet to extract the csrfToken
-JAVASCRIPT_CSRF_EXTRACTOR = "document.getElementsByName('ol-csrfToken')[0].content"
 # Name of the cookies we want to extract
-COOKIE_NAMES = ["overleaf_session2", "GCLB"]
+COOKIE_NAMES = ["overleaf_session2", "GCLB","sharelatex.sid"]
 
 
 class OlBrowserLoginWindow(QMainWindow):
@@ -53,15 +51,21 @@ class OlBrowserLoginWindow(QMainWindow):
         self.resize(600, 700)
 
     def handle_load_finished(self):
-        def callback(result):
-            self._csrf = result
-            self._login_success = True
-            QCoreApplication.quit()
+        
+            def callback(result):
+                if result is not None:
+                    self._csrf = result
+                    self._login_success = True
+                    QCoreApplication.quit()
 
-        if self.webview.url().toString() == PROJECT_URL:
-            self.webview.page().runJavaScript(
-                JAVASCRIPT_CSRF_EXTRACTOR, callback
-            )
+            if self.webview.url().toString() == PROJECT_URL:
+                for extractor in JAVASCRIPT_CSRF_EXTRACTORS:
+                    self.webview.page().runJavaScript(
+                        extractor, callback
+                    )
+
+                    if self.login_success:
+                        break
 
     def handle_cookie_added(self, cookie):
         cookie_name = cookie.name().data().decode('utf-8')

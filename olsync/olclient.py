@@ -15,16 +15,16 @@ import json
 import uuid
 from socketIO_client import SocketIO
 import time
-from os import sep
+from os import sep, getenv
 
+BASE_URL = getenv("OL_BASE_URL","https://overleaf.com")  # The Overleaf Base URL
 # Where to get the CSRF Token and where to send the login request to
-LOGIN_URL = "https://www.overleaf.com/login"
-PROJECT_URL = "https://www.overleaf.com/project"  # The dashboard URL
+LOGIN_URL = BASE_URL + "/login"
+PROJECT_URL = BASE_URL + "/project"  # The dashboard URL
 # The URL to download all the files in zip format
-DOWNLOAD_URL = "https://www.overleaf.com/project/{}/download/zip"
-UPLOAD_URL = "https://www.overleaf.com/project/{}/upload"  # The URL to upload files
-FOLDER_URL = "https://www.overleaf.com/project/{}/folder"  # The URL to create folders
-BASE_URL = "https://www.overleaf.com"  # The Overleaf Base URL
+DOWNLOAD_URL = BASE_URL + "/project/{}/download/zip"
+UPLOAD_URL = BASE_URL + "/project/{}/upload"  # The URL to upload files
+FOLDER_URL = BASE_URL + "/project/{}/folder"  # The URL to create folders
 
 
 class OverleafClient(object):
@@ -81,14 +81,22 @@ class OverleafClient(object):
 
             return {"cookie": self._cookie, "csrf": self._csrf}
 
+    def __retrieve_projects_json__(self):
+        projects_page = reqs.get(PROJECT_URL, cookies=self._cookie)
+        bs_site = BeautifulSoup(projects_page.content, 'html.parser')
+        projects_elem = bs_site.find('meta', {'name': 'ol-projects'})
+        if projects_elem is None:
+            projects_elem = bs_site.find(id="data")
+            return json.loads(projects_elem.string)['projects']
+        else:
+            return json.loads(projects_elem.get('content'))
+
     def all_projects(self):
         """
         Get all of a user's active projects (= not archived and not trashed)
         Returns: List of project objects
         """
-        projects_page = reqs.get(PROJECT_URL, cookies=self._cookie)
-        json_content = json.loads(
-            BeautifulSoup(projects_page.content, 'html.parser').find('meta', {'name': 'ol-projects'}).get('content'))
+        json_content = self.__retrieve_projects_json__()
         return list(OverleafClient.filter_projects(json_content))
 
     def get_project(self, project_name):
@@ -98,9 +106,7 @@ class OverleafClient(object):
         Returns: project object
         """
 
-        projects_page = reqs.get(PROJECT_URL, cookies=self._cookie)
-        json_content = json.loads(
-            BeautifulSoup(projects_page.content, 'html.parser').find('meta', {'name': 'ol-projects'}).get('content'))
+        json_content = self.__retrieve_projects_json__()
         return next(OverleafClient.filter_projects(json_content, {"name": project_name}), None)
 
     def download_project(self, project_id):
@@ -134,7 +140,6 @@ class OverleafClient(object):
         }
         r = reqs.post(FOLDER_URL.format(project_id),
                       cookies=self._cookie, headers=headers, json=params)
-
         if r.ok:
             return json.loads(r.content)
         elif r.status_code == str(400):
@@ -161,11 +166,8 @@ class OverleafClient(object):
             project_infos = project_infos_dict
 
         # Convert cookie from CookieJar to string
-        cookie = "GCLB={}; overleaf_session2={}" \
-            .format(
-            self._cookie["GCLB"],
-            self._cookie["overleaf_session2"]
-        )
+        cookie = "; ".join(["{}={}".format(k,v) for k,v in self._cookie.items()])
+
 
         # Connect to Overleaf Socket.IO, send a time parameter and the cookies
         socket_io = SocketIO(
